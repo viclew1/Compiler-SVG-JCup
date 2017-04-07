@@ -1,0 +1,145 @@
+package calculator;
+
+import java.util.*;
+import svg.*;
+import svgImpl.*;
+import instructions.*;
+import expressions.*;
+import formes.*;
+import builder.StringBuilder;
+import builder.Str;
+import attributes.*;
+
+parser code {:
+    
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer("Error");
+		m.append (info.toString());
+        m.append(" : "+message);
+        System.err.println(m.toString());
+    }
+   
+    public void report_fatal_error(String message, Object info) {
+        report_error(message, info);
+        System.exit(1);
+    }
+
+	private Map<String, Integer> values = new TreeMap<String, Integer> ();
+
+	public void setValue (String name, int value) {
+		values.put(name, new Integer (value));
+	}
+	
+	public int getValue (String name) {
+		int value = 0;
+		if (values.containsKey(name))
+			value = values.get(name).intValue();
+		return value;
+	}
+	
+	private SVGContext context;
+    public void setContext (SVGContext context) {
+    	this.context = context;
+    }
+
+    public SVGContext getContext () {
+    	if (context==null)
+    		context=new SVGContextImpl();
+		return context;
+    }
+
+	public SVGFactory getFactory () {
+		return getContext().getFactory();
+	}
+
+:}
+
+terminal TERM;
+
+terminal Integer NOMBRE;
+terminal String VAR,STRING;
+terminal String Color;
+terminal EGAL,PLUS,MOINS,MULT,DIV,U_MOINS,U_PLUS;
+terminal ELLIPSE,CIRCLE,LIGNE,TEXTE,RECT,GROUP;
+terminal OP,CP;
+terminal REPEAT,BEGIN,END;
+terminal STRING_LIM;
+terminal STROKE,FILL,S_WIDTH,F_SIZE,COURBURE;
+
+nonterminal Bloc Bloc;
+nonterminal SVGCompiler SVGCompiler;
+nonterminal Instruction Instructions,Instruction;
+nonterminal Forme Forms,Form;
+nonterminal Expression expr;
+nonterminal Instr instr;
+nonterminal Str Strs,Str;
+nonterminal Attribute Attrs,Attr;
+
+precedence left MOINS,PLUS;
+precedence left MULT,DIV;
+precedence right U_MOINS;
+precedence right U_PLUS;
+
+
+
+SVGCompiler	::= Bloc
+			;
+			
+Bloc		::=	Instructions:i     {: RESULT = getFactory().createBloc(i); :}
+			;
+
+Instructions ::= 
+			| 	Instructions:is Instruction:i	{: RESULT = getFactory().createInstructions(is,i); :}
+			;
+
+Instruction ::=  
+			|	VAR:a EGAL expr:p									{: RESULT = getFactory().createNodeAffect(a,p); :}
+			|   REPEAT expr:n BEGIN Instructions:i END				{: RESULT = getFactory().createNodeRepeat(n,i); :}
+			|	Forms:f												{: RESULT = getFactory().createNodeForm(f); 	:}
+			;
+			
+Forms		::= Form:f					{: RESULT = getFactory().createNodeFormes(f,null); :}
+			|	Forms:f1 Form:f2		{: RESULT = getFactory().createNodeFormes(f1,f2); :}
+			;			
+			
+			
+Form		::=	
+			|	RECT expr:x expr:y expr:w expr:h Attrs:a					{: RESULT = getFactory().createNodeRect(x,y,w,h,a); :}
+			|	ELLIPSE expr:cx expr:cy expr:rx expr:ry	Attrs:a				{: RESULT = getFactory().createNodeEllipse(cx,cy,rx,ry,a); :}
+			|	CIRCLE expr:cx expr:cy expr:r Attrs:a						{: RESULT = getFactory().createNodeCircle(cx,cy,r,a); :}
+			|	LIGNE expr:x1 expr:y1 expr:x2 expr:y2 Attrs:a				{: RESULT = getFactory().createNodeLigne(x1,y1,x2,y2,a); :}
+			|	TEXTE expr:x expr:y STRING_LIM Strs:s STRING_LIM Attrs:a	{: RESULT = getFactory().createNodeTexte(x,y,s,a); :}
+			|	GROUP expr:x expr:y Attrs: a BEGIN Forms:f END				{: RESULT = getFactory().createNodeGroupe(x,y,a,f); :}
+			;
+
+expr		::=	OP expr:e CP			{: RESULT = e; :}
+			| expr:e1 PLUS expr:e2		{: RESULT = getFactory().createNodeAdd (e1, e2); :}
+			| expr:e1 MOINS expr:e2		{: RESULT = getFactory().createNodeSub (e1, e2); :}
+			| expr:e1 MULT expr:e2		{: RESULT = getFactory().createNodeMult (e1, e2); :}
+			| expr:e1 DIV expr:e2		{: RESULT = getFactory().createNodeDiv (e1, e2); :}
+			| PLUS expr:e				{: RESULT = getFactory().createNodePlus (e); :} %prec U_PLUS
+			| MOINS expr:e				{: RESULT = getFactory().createNodeMinus (e); :} %prec U_MOINS
+			| NOMBRE:n					{: RESULT = getFactory().createNodeReal (n); :}
+			| VAR:id					{: RESULT = getFactory().createNodeVariable (id); :}
+			;
+			
+Strs		::= 
+			|	Strs:strs Str:str		{: RESULT = getFactory().createStringBuilder(strs,str); :}
+			;
+			
+Str			::= 
+			|	VAR:s 					{: RESULT = getFactory().createStringPiece(s); :}
+			;
+			
+Attrs		::=
+			|	Attrs:a Attr:a2			{: RESULT = getFactory().createNodeAttributes(a,a2); :} 
+			;
+			
+			
+Attr		::=
+			|	STROKE Color:c				{: RESULT = getFactory().createNodeStroke(c); :}
+			|	FILL Color:c				{: RESULT = getFactory().createNodeFill(c); :}
+			|	S_WIDTH expr:e				{: RESULT = getFactory().createNodeStrokeWidth(e); :} 
+			|	F_SIZE expr:e				{: RESULT = getFactory().createNodeFontSize(e); :} 
+			|	COURBURE expr:e1 expr:e2	{: RESULT = getFactory().createNodeCourbure(e1,e2); :}
+			;
